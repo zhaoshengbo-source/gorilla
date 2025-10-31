@@ -25,22 +25,21 @@ from tqdm import tqdm as tqdm_original
 from bfcl_eval.model_handler.base_handler import BaseHandler
 from bfcl_eval.model_handler.local_inference.base_oss_handler import OSSHandler
 
-import builtins, sys
+import sys
 from threading import RLock
 
 _tqdm_io_lock = RLock()
+tqdm_original.set_lock(_tqdm_io_lock)
 
 def _tqdm_write(msg, end="\n"):
     with _tqdm_io_lock:
         tqdm_original.write(str(msg), file=sys.stdout, end=end)
 
-_print_original = builtins.print
 def print(*args, **kwargs): 
     sep = kwargs.pop("sep", " ")
     end = kwargs.pop("end", "\n")
     _tqdm_write(sep.join(str(a) for a in args), end=end)
 
-builtins.print = print
 
 class tqdm_fixed(tqdm_original):
     def update(self, n=1):
@@ -49,9 +48,6 @@ class tqdm_fixed(tqdm_original):
         return r
 
 tqdm = tqdm_fixed
-
-def log_stable(msg: str):
-    print(msg)
 
 def get_args():
     parser = argparse.ArgumentParser()
