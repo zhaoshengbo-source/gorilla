@@ -20,11 +20,38 @@ from bfcl_eval.constants.model_config import MODEL_CONFIG_MAPPING
 from bfcl_eval.eval_checker.eval_runner_helper import load_file
 from bfcl_eval.constants.enums import ModelStyle
 from bfcl_eval.utils import *
-from tqdm import tqdm
+from tqdm import tqdm as tqdm_original
 
 from bfcl_eval.model_handler.base_handler import BaseHandler
 from bfcl_eval.model_handler.local_inference.base_oss_handler import OSSHandler
 
+import builtins, sys
+from threading import RLock
+
+_tqdm_io_lock = RLock()
+
+def _tqdm_write(msg, end="\n"):
+    with _tqdm_io_lock:
+        tqdm_original.write(str(msg), file=sys.stdout, end=end)
+
+_print_original = builtins.print
+def print(*args, **kwargs): 
+    sep = kwargs.pop("sep", " ")
+    end = kwargs.pop("end", "\n")
+    _tqdm_write(sep.join(str(a) for a in args), end=end)
+
+builtins.print = print
+
+class tqdm_fixed(tqdm_original):
+    def update(self, n=1):
+        r = super().update(n)
+        self.refresh()
+        return r
+
+tqdm = tqdm_fixed
+
+def log_stable(msg: str):
+    print(msg)
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -187,7 +214,7 @@ def multi_threaded_inference(handler, test_case, include_input_log, exclude_stat
             + traceback.format_exc(limit=10)
             + "-" * 100
         )
-        tqdm.write(error_block)
+        print(error_block)
 
         result = f"Error during inference: {str(e)}"
         metadata = {"traceback": traceback.format_exc()}
@@ -275,6 +302,7 @@ def generate_results(args, model_name, test_cases_total):
             mininterval=0.2,      
             smoothing=0.1,        
             bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
+            file=sys.stdout, 
         ) as pbar:
 
             # seed initial ready tasks
@@ -302,6 +330,7 @@ def generate_results(args, model_name, test_cases_total):
 
                     # Update progress bar right after inference completes
                     pbar.update()
+                    pbar.refresh()
                     completed.add(test_case_id)
 
                     # unlock children
@@ -361,16 +390,16 @@ def main(args):
                 "• For officially supported models, please refer to `SUPPORTED_MODELS.md`.\n"
                 "• For running new models, please refer to `README.md` and `CONTRIBUTING.md`."
             )
-    tqdm.write(f"Generating results for {args.model}")
+    print(f"Generating results for {args.model}")
     if args.run_ids:
-        tqdm.write("Running specific test cases. Ignoring `--test-category` argument.")
+        print("Running specific test cases. Ignoring `--test-category` argument.")
     else:
-        tqdm.write(f"Running full test cases for categories: {all_test_categories}.")
+        print(f"Running full test cases for categories: {all_test_categories}.")
 
     if any(is_format_sensitivity(test_category) for test_category in all_test_categories):
         for model_name in args.model:
             if MODEL_CONFIG_MAPPING[model_name].is_fc_model:
-                tqdm.write(
+                print(
                     "⚠️ Warning: Format sensitivity test cases are only supported for prompting (non-FC) models. "
                     f"Since {model_name} is a FC model based on its config, the format sensitivity test cases will be skipped."
                 )
@@ -389,7 +418,7 @@ def main(args):
         )
 
         if len(test_cases_total) == 0:
-            tqdm.write(
+            print(
                 f"✅ All selected test cases have been previously generated for {model_name}. No new test cases to generate."
             )
         else:
