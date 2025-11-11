@@ -196,7 +196,7 @@ def multi_threaded_inference(handler, test_case, include_input_log, exclude_stat
 
     try:
         result, metadata = handler.inference(
-            deepcopy(test_case), include_input_log, exclude_state_log
+            test_case, include_input_log, exclude_state_log
         )
     except Exception as e:
         # This is usually the case when the model getting stuck on one particular test case.
@@ -410,7 +410,7 @@ def main(args):
             args,
             model_name,
             all_test_categories,
-            all_test_entries_involved,
+            deepcopy(all_test_entries_involved),
         )
 
         if len(test_cases_total) == 0:
